@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(helm install:*)",
+      "Bash(kubectl cluster-info:*)",
+      "Bash(helm list:*)",
+      "Bash(KUBECONFIG=~/.kube/config.105 helm install:*)",
+      "Bash(KUBECONFIG=~/.kube/config.105 helm upgrade:*)",
+      "Bash(KUBECONFIG=~/.kube/config.105 kubectl get:*)",
+      "Bash(KUBECONFIG=~/.kube/config.105 kubectl describe:*)",
+      "Bash(KUBECONFIG=~/.kube/config.105 kubectl delete:*)"
+    ]
+  }
+}

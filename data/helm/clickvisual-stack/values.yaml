@@ -1,0 +1,321 @@
+# ClickVisual Complete Stack Helm Chart Values
+# This chart supports two deployment modes:
+# 1. Standalone Mode (default): Deploys all dependencies automatically
+# 2. External Mode: Uses existing external services
+
+# Global settings
+global:
+  # Namespace where all resources will be deployed
+  namespaceOverride: ""
+  # Storage class for persistent volumes
+  storageClass: ""
+
+# =====================================================
+# ClickVisual Application Settings
+# =====================================================
+clickvisual:
+  enabled: true
+  replicaCount: 1
+
+  image:
+    repository: clickvisual/clickvisual
+    pullPolicy: IfNotPresent
+    tag: "latest"
+
+  service:
+    type: ClusterIP
+    port: 19001
+
+  ingress:
+    enabled: false
+    className: ""
+    annotations: {}
+    hosts:
+      - host: clickvisual.local
+        paths:
+          - path: /
+            pathType: Prefix
+    tls: []
+
+  resources:
+    limits:
+      cpu: 1000m
+      memory: 512Mi
+    requests:
+      cpu: 500m
+      memory: 256Mi
+
+  # Application configuration
+  config:
+    # Secret key for session encryption
+    secretKey: "secretKey-change-me-in-production"
+    # Root URL for the application
+    rootURL: "http://localhost:19001"
+    # Log level: debug, info, warn, error
+    logLevel: "info"
+    # Enable multi-copy mode (requires Redis)
+    isMultiCopy: false
+    # Encryption key (32 characters hex)
+    encryptionKey: "00112233445566778899aabbccddeeff"
+
+    # OAuth providers (optional)
+    oauth:
+      github:
+        enabled: false
+        clientId: ""
+        clientSecret: ""
+      gitlab:
+        enabled: false
+        clientId: ""
+        clientSecret: ""
+
+# =====================================================
+# MySQL Database
+# =====================================================
+mysql:
+  # Set to false to use external MySQL
+  enabled: true
+
+  # External MySQL configuration (used when enabled: false)
+  external:
+    host: ""
+    port: 3306
+    database: "clickvisual"
+    username: "root"
+    password: ""
+
+  # Internal MySQL configuration (used when enabled: true)
+  auth:
+    rootPassword: "shimo"
+    database: "clickvisual"
+
+  primary:
+    persistence:
+      enabled: true
+      size: 8Gi
+      # storageClass: ""
+
+    service:
+      type: ClusterIP
+      port: 3306
+
+    resources:
+      limits:
+        cpu: 1000m
+        memory: 1Gi
+      requests:
+        cpu: 500m
+        memory: 512Mi
+
+  # Initialize database with schema
+  initdbScripts:
+    enabled: true
+
+# =====================================================
+# Redis Cache
+# =====================================================
+redis:
+  # Set to false to use external Redis
+  enabled: true
+
+  # External Redis configuration (used when enabled: false)
+  external:
+    host: ""
+    port: 6379
+    password: ""
+    database: 0
+
+  # Internal Redis configuration (used when enabled: true)
+  auth:
+    enabled: false
+    password: ""
+
+  master:
+    persistence:
+      enabled: true
+      size: 2Gi
+
+    service:
+      type: ClusterIP
+      port: 6379
+
+    resources:
+      limits:
+        cpu: 500m
+        memory: 512Mi
+      requests:
+        cpu: 250m
+        memory: 256Mi
+
+# =====================================================
+# ClickHouse Database
+# =====================================================
+clickhouse:
+  # Set to false to use external ClickHouse
+  enabled: true
+
+  # External ClickHouse configuration (used when enabled: false)
+  external:
+    host: ""
+    port: 9000
+    httpPort: 8123
+    username: "default"
+    password: ""
+    database: "default"
+
+  # Internal ClickHouse configuration (used when enabled: true)
+  auth:
+    username: "root"
+    password: "shimo"
+
+  shards: 1
+  replicaCount: 1
+
+  persistence:
+    enabled: true
+    size: 20Gi
+
+  service:
+    type: ClusterIP
+    ports:
+      tcp: 9000
+      http: 8123
+
+  resources:
+    limits:
+      cpu: 2000m
+      memory: 4Gi
+    requests:
+      cpu: 1000m
+      memory: 2Gi
+
+# =====================================================
+# Kafka Message Queue
+# =====================================================
+kafka:
+  # Set to false to use external Kafka
+  enabled: true
+
+  # External Kafka configuration (used when enabled: false)
+  external:
+    brokers: []  # e.g., ["kafka-1:9092", "kafka-2:9092"]
+
+  # Internal Kafka configuration (used when enabled: true)
+  replicaCount: 1
+
+  persistence:
+    enabled: true
+    size: 10Gi
+
+  service:
+    type: ClusterIP
+    port: 9092
+
+  resources:
+    limits:
+      cpu: 1000m
+      memory: 2Gi
+    requests:
+      cpu: 500m
+      memory: 1Gi
+
+  # Zookeeper settings (required for Kafka)
+  zookeeper:
+    enabled: true
+    replicaCount: 1
+    persistence:
+      enabled: true
+      size: 2Gi
+    resources:
+      limits:
+        cpu: 500m
+        memory: 512Mi
+      requests:
+        cpu: 250m
+        memory: 256Mi
+
+# =====================================================
+# Fluent-bit Log Collector (DaemonSet)
+# =====================================================
+fluentbit:
+  enabled: true
+
+  image:
+    repository: fluent/fluent-bit
+    tag: "2.2.0"
+
+  # Cluster name for log identification
+  clusterName: "kubernetes-cluster"
+
+  # Resources for each fluent-bit pod
+  resources:
+    limits:
+      cpu: 200m
+      memory: 256Mi
+    requests:
+      cpu: 100m
+      memory: 128Mi
+
+  # Custom configuration (optional)
+  config:
+    # Add custom inputs, filters, outputs here
+    inputs: []
+    filters: []
+    outputs: []
+
+# =====================================================
+# Prometheus Stack (Optional)
+# =====================================================
+prometheus:
+  enabled: false
+
+  server:
+    retention: "6h"
+    persistence:
+      enabled: true
+      size: 5Gi
+
+    resources:
+      limits:
+        cpu: 1000m
+        memory: 2Gi
+      requests:
+        cpu: 500m
+        memory: 1Gi
+
+  alertmanager:
+    enabled: false
+    persistence:
+      enabled: true
+      size: 2Gi
+
+    resources:
+      limits:
+        cpu: 200m
+        memory: 256Mi
+      requests:
+        cpu: 100m
+        memory: 128Mi
+
+# =====================================================
+# prom2click (Prometheus to ClickHouse bridge)
+# =====================================================
+prom2click:
+  enabled: false
+
+  replicaCount: 1
+
+  image:
+    repository: clickvisual/prom2click
+    tag: "latest"
+
+  service:
+    port: 9222
+
+  resources:
+    limits:
+      cpu: 500m
+      memory: 512Mi
+    requests:
+      cpu: 250m
+      memory: 256Mi

@@ -1,0 +1,52 @@
+# External Services Configuration - 使用外部服务
+# 适用于：已有基础设施、生产环境
+
+# 使用外部 MySQL
+mysql:
+  enabled: false
+  external:
+    host: "mysql.infrastructure.svc.cluster.local"
+    port: 3306
+    database: "clickvisual"
+    username: "clickvisual"
+    password: "your-mysql-password"
+
+# 使用外部 Redis
+redis:
+  enabled: false
+  external:
+    host: "redis.infrastructure.svc.cluster.local"
+    port: 6379
+    password: "your-redis-password"
+    database: 0
+
+# 使用外部 ClickHouse
+clickhouse:
+  enabled: false
+  external:
+    host: "clickhouse.infrastructure.svc.cluster.local"
+    port: 9000
+    httpPort: 8123
+    username: "default"
+    password: "your-clickhouse-password"
+    database: "default"
+
+# 使用外部 Kafka
+kafka:
+  enabled: false
+  external:
+    brokers:
+      - "kafka-1.infrastructure.svc.cluster.local:9092"
+      - "kafka-2.infrastructure.svc.cluster.local:9092"
+      - "kafka-3.infrastructure.svc.cluster.local:9092"
+
+# 只部署 ClickVisual 和 Fluent-bit
+clickvisual:
+  enabled: true
+  replicaCount: 3
+  config:
+    isMultiCopy: true  # 多副本模式需要 Redis
+
+fluentbit:
+  enabled: true
+  clusterName: "production-cluster"

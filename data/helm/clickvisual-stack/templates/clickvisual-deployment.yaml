@@ -1,0 +1,211 @@
+{{- if .Values.clickvisual.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Release.Name }}-clickvisual-config
+  labels:
+    {{- include "clickvisual-stack.labels" . | nindent 4 }}
+    app.kubernetes.io/component: clickvisual
+data:
+  default.toml: |
+    [app]
+    isMultiCopy = {{ .Values.clickvisual.config.isMultiCopy }}
+    secretKey = "{{ .Values.clickvisual.config.secretKey }}"
+    rootURL = "{{ .Values.clickvisual.config.rootURL }}"
+    baseURL = "/api/admin/login/"
+    permissionFile = './config/resource.yaml'
+    serveFromSubPath = false
+    encryptionKey = "{{ .Values.clickvisual.config.encryptionKey }}"
+
+    [casbin.rule]
+    path = "./config/rbac.conf"
+
+    [server.http]
+    host = "0.0.0.0"
+    port = {{ .Values.clickvisual.service.port }}
+    embedPath = "dist"
+    maxAge = 86400
+
+    [server.governor]
+    host = "0.0.0.0"
+    port = 19011
+
+    [logger]
+    level = "{{ .Values.clickvisual.config.logLevel }}"
+    name = "clickvisual.log"
+
+    {{- if or .Values.clickvisual.config.isMultiCopy .Values.redis.enabled }}
+    [redis]
+    debug = true
+    addr = "{{ include "clickvisual-stack.redis.addr" . }}"
+    writeTimeout = "3s"
+    {{- if or .Values.redis.auth.enabled .Values.redis.external.password }}
+    password = "{{ include "clickvisual-stack.redis.password" . }}"
+    {{- end }}
+    {{- end }}
+
+    [mysql]
+    debug = true
+    dsn = "{{ include "clickvisual-stack.mysql.dsn" . }}"
+    level = "info"
+    maxIdleConns = 5
+    maxOpenConns = 10
+    connMaxLifetime = "300s"
+
+    [auth]
+    {{- if or .Values.clickvisual.config.isMultiCopy .Values.redis.enabled }}
+    mode = "redis"
+    redisSize = 10
+    redisNetwork = "tcp"
+    redisAddr = "{{ include "clickvisual-stack.redis.addr" . }}"
+    {{- if or .Values.redis.auth.enabled .Values.redis.external.password }}
+    redisPassword = "{{ include "clickvisual-stack.redis.password" . }}"
+    {{- end }}
+    {{- else }}
+    mode = "memstore"
+    {{- end }}
+    name = "clickvisual_session"
+    debug = true
+    Keypairs = "secret"
+
+    [auth.anonymous]
+    enabled = false
+
+    [auth.proxy]
+    enabled = false
+    isAutoLogin = false
+    headerName = "X-CLICKVISUAL-USER"
+    headerNickName = "X-CLICKVISUAL-NICKNAME"
+    rootTokenKey = "X-CLICKVISUAL-TOKEN"
+    rootTokenValue = "xxx"
+
+    {{- if .Values.clickvisual.config.oauth.github.enabled }}
+    [[auth.tps]]
+    typ = "github"
+    enable = true
+    clientId = "{{ .Values.clickvisual.config.oauth.github.clientId }}"
+    clientSecret = "{{ .Values.clickvisual.config.oauth.github.clientSecret }}"
+    allowSignUp = true
+    scopes = ["user:email", "read:org"]
+    authUrl = "https://github.com/login/oauth/authorize"
+    tokenUrl = "https://github.com/login/oauth/access_token"
+    apiUrl = "https://api.github.com/user"
+    allowedDomains = []
+    teamIds = []
+    allowedOrganizations = []
+    {{- end }}
+
+    {{- if .Values.clickvisual.config.oauth.gitlab.enabled }}
+    [[auth.tps]]
+    typ = "gitlab"
+    enable = true
+    clientId = "{{ .Values.clickvisual.config.oauth.gitlab.clientId }}"
+    clientSecret = "{{ .Values.clickvisual.config.oauth.gitlab.clientSecret }}"
+    allowSignUp = true
+    scopes = ["api"]
+    authUrl = "https://gitlab.com/oauth/authorize"
+    tokenUrl = "https://gitlab.com/oauth/token"
+    apiUrl = "https://gitlab.com/api/v4"
+    allowedDomains = []
+    teamIds = []
+    allowedOrganizations = []
+    {{- end }}
+
+    [prom2click]
+    enable = false
+
+    [defaultCh]
+    dsn = "{{ include "clickvisual-stack.clickhouse.dsn.http" . }}"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Release.Name }}-clickvisual
+  labels:
+    {{- include "clickvisual-stack.labels" . | nindent 4 }}
+    app.kubernetes.io/component: clickvisual
+spec:
+  type: {{ .Values.clickvisual.service.type }}
+  ports:
+    - port: {{ .Values.clickvisual.service.port }}
+      targetPort: http
+      protocol: TCP
+      name: http
+    - port: 19011
+      targetPort: governor
+      protocol: TCP
+      name: governor
+  selector:
+    {{- include "clickvisual-stack.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: clickvisual
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Release.Name }}-clickvisual
+  labels:
+    {{- include "clickvisual-stack.labels" . | nindent 4 }}
+    app.kubernetes.io/component: clickvisual
+spec:
+  replicas: {{ .Values.clickvisual.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "clickvisual-stack.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: clickvisual
+  template:
+    metadata:
+      labels:
+        {{- include "clickvisual-stack.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: clickvisual
+    spec:
+      initContainers:
+        - name: wait-for-mysql
+          image: busybox:1.35
+          command:
+            - sh
+            - -c
+            - |
+              until nc -z {{ include "clickvisual-stack.mysql.host" . }} {{ include "clickvisual-stack.mysql.port" . }}; do
+                echo "Waiting for MySQL..."
+                sleep 2
+              done
+        {{- if .Values.clickhouse.enabled }}
+        - name: wait-for-clickhouse
+          image: busybox:1.35
+          command:
+            - sh
+            - -c
+            - |
+              until nc -z {{ include "clickvisual-stack.clickhouse.host" . }} {{ include "clickvisual-stack.clickhouse.port" . }}; do
+                echo "Waiting for ClickHouse..."
+                sleep 2
+              done
+        {{- end }}
+      containers:
+        - name: clickvisual
+          image: "{{ .Values.clickvisual.image.repository }}:{{ .Values.clickvisual.image.tag }}"
+          imagePullPolicy: {{ .Values.clickvisual.image.pullPolicy }}
+          env:
+            - name: EGO_DEBUG
+              value: "true"
+            - name: EGO_CONFIG_PATH
+              value: "configs/default.toml"
+            - name: EGO_LOG_WRITER
+              value: "stderr"
+          ports:
+            - name: http
+              containerPort: {{ .Values.clickvisual.service.port }}
+              protocol: TCP
+            - name: governor
+              containerPort: 19011
+              protocol: TCP
+          resources:
+            {{- toYaml .Values.clickvisual.resources | nindent 12 }}
+          volumeMounts:
+            - name: config
+              mountPath: /clickvisual/configs
+      volumes:
+        - name: config
+          configMap:
+            name: {{ .Release.Name }}-clickvisual-config
+{{- end }}
